@@ -106,8 +106,8 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e37d50ca"):
                     browser.close()
                     return False
 
-            # --- 核心操作：查找并点击 "시간 추가" 按钮 ---
-            add_button_selector = 'button:has-text("시간 추가")' # 已更新为新的按钮文本
+            # --- 核心操作：查找并点击 "시간추가" 按钮 ---
+            add_button_selector = 'button:has-text("시간추가")' # 已更新为新的按钮文本
             print(f"正在查找并等待 '{add_button_selector}' 按钮...")
 
             try:
@@ -121,7 +121,7 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e37d50ca"):
                 browser.close()
                 return True
             except PlaywrightTimeoutError:
-                print(f"错误: 在30秒内未找到或 '시간 추가' 按钮不可见/不可点击。")
+                print(f"错误: 在30秒内未找到或 '시간추가' 按钮不可见/不可点击。")
                 page.screenshot(path="add_6h_button_not_found.png")
                 browser.close()
                 return False
