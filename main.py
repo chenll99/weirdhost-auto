@@ -158,46 +158,46 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e66c2244"):
 
             try:
                 # 等待按钮变为可见且可点击
-            # —— 点击前读取剩余时间 ——
-            before_time = get_remaining_time_text(page)
-            print(f"点击前剩余时间: {before_time}")
+                # —— 点击前读取剩余时间 ——
+                before_time = get_remaining_time_text(page)
+                print(f"点击前剩余时间: {before_time}")
 
-            add_button.click()
-            print("已点击 '시간추가' 按钮，等待服务器更新...")
-            time.sleep(6)
+                add_button.click()
+                print("已点击 '시간추가' 按钮，等待服务器更新...")
+                time.sleep(6)
 
-            # —— 点击后再次读取 ——
-            after_time = get_remaining_time_text(page)
-            print(f"点击后剩余时间: {after_time}")
+                # —— 点击后再次读取 ——
+                after_time = get_remaining_time_text(page)
+                print(f"点击后剩余时间: {after_time}")
 
-            # —— 判断是否真的增加 ——
-            if before_time and after_time and before_time != after_time:
-                print("✅ 剩余时间已变化，确认续期成功")
+                # —— 判断是否真的增加 ——
+                if before_time and after_time and before_time != after_time:
+                    print("✅ 剩余时间已变化，确认续期成功")
 
-                send_telegram(
-                    "✅ <b>服务器续期成功</b>\n\n"
-                    f"🕒 之前：{before_time}\n"
-                    f"🕓 现在：{after_time}\n\n"
-                    f"🔗 {server_url}"
-               )
+                    send_telegram(
+                        "✅ <b>服务器续期成功</b>\n\n"
+                        f"🕒 之前：{before_time}\n"
+                        f"🕓 现在：{after_time}\n\n"
+                        f"🔗 {server_url}"
+                   )
 
-               browser.close()
-               return True
-            else:
-                print("⚠️ 点击完成，但未检测到剩余时间变化")
+                   browser.close()
+                   return True
+                else:
+                    print("⚠️ 点击完成，但未检测到剩余时间变化")
 
-                page.screenshot(path="renew_time_not_changed.png")
+                    page.screenshot(path="renew_time_not_changed.png")
 
-                send_telegram(
-                    "⚠️ <b>服务器续期异常</b>\n\n"
-                    f"🕒 之前：{before_time}\n"
-                    f"🕓 现在：{after_time}\n\n"
-                    "按钮已点击，但时间未确认增加\n"
-                    f"🔗 {server_url}"
-                )
+                    send_telegram(
+                        "⚠️ <b>服务器续期异常</b>\n\n"
+                        f"🕒 之前：{before_time}\n"
+                        f"🕓 现在：{after_time}\n\n"
+                        "按钮已点击，但时间未确认增加\n"
+                        f"🔗 {server_url}"
+                    )
 
-                browser.close()
-                return False
+                    browser.close()
+                    return False
 
             except PlaywrightTimeoutError:
                 print(f"错误: 在30秒内未找到或 '시간추가' 按钮不可见/不可点击。")
