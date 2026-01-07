@@ -205,18 +205,18 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e66c2244"):
                 browser.close()
                 return False
 
-        except Exception as e:
-            error_msg = (
-                "❌ <b>服务器续期脚本异常</b>\n\n"
-                f"{e}\n\n"
-                f"🔗 {server_url}"
-            )
+            except Exception as e:
+                error_msg = (
+                    "❌ <b>服务器续期脚本异常</b>\n\n"
+                    f"{e}\n\n"
+                    f"🔗 {server_url}"
+                )
 
-            print(error_msg)
-            page.screenshot(path="general_error.png")
-            send_telegram(error_msg)
-            browser.close()
-            return False
+                print(error_msg)
+                page.screenshot(path="general_error.png")
+                send_telegram(error_msg)
+                browser.close()
+                return False
 
 
 if __name__ == "__main__":
