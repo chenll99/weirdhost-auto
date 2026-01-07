@@ -2,6 +2,52 @@ import os
 import time
 from playwright.sync_api import sync_playwright, Cookie, TimeoutError as PlaywrightTimeoutError
 
+import requests
+def send_telegram(message: str):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        print("⚠️ 未配置 Telegram，跳过通知")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+
+    try:
+        requests.post(url, json=payload, timeout=15)
+    except Exception as e:
+        print(f"Telegram 通知失败: {e}")
+
+def get_remaining_time_text(page):
+    """
+    读取服务器剩余时间文本
+    成功返回字符串，失败返回 None
+    """
+    selectors = [
+        'text=/剩余时间|Remaining|Expires|만료/',
+        '.text-muted',
+        '.server-status'
+    ]
+
+    for sel in selectors:
+        locator = page.locator(sel)
+        if locator.count() > 0:
+            try:
+                text = locator.first.inner_text().strip()
+                if text:
+                    return text
+            except:
+                pass
+
+    return None
+
+
 def add_server_time(server_url="https://hub.weirdhost.xyz/server/e66c2244"):
     """
     尝试登录 hub.weirdhost.xyz 并点击 "시간 추가" 按钮。
@@ -112,14 +158,47 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e66c2244"):
 
             try:
                 # 等待按钮变为可见且可点击
-                add_button = page.locator(add_button_selector)
-                add_button.wait_for(state='visible', timeout=30000)
-                add_button.click()
-                print("成功点击 '시간 추가' 按钮。")
-                time.sleep(5) # 等待5秒，确保操作在服务器端生效
-                print("任务完成。")
+            # —— 点击前读取剩余时间 ——
+            before_time = get_remaining_time_text(page)
+            print(f"点击前剩余时间: {before_time}")
+
+            add_button.click()
+            print("已点击 '시간추가' 按钮，等待服务器更新...")
+            time.sleep(6)
+
+            # —— 点击后再次读取 ——
+            after_time = get_remaining_time_text(page)
+            print(f"点击后剩余时间: {after_time}")
+
+            # —— 判断是否真的增加 ——
+            if before_time and after_time and before_time != after_time:
+                print("✅ 剩余时间已变化，确认续期成功")
+
+                send_telegram(
+                    "✅ <b>服务器续期成功</b>\n\n"
+                    f"🕒 之前：{before_time}\n"
+                    f"🕓 现在：{after_time}\n\n"
+                    f"🔗 {server_url}"
+               )
+
+               browser.close()
+               return True
+            else:
+                print("⚠️ 点击完成，但未检测到剩余时间变化")
+
+                page.screenshot(path="renew_time_not_changed.png")
+
+                send_telegram(
+                    "⚠️ <b>服务器续期异常</b>\n\n"
+                    f"🕒 之前：{before_time}\n"
+                    f"🕓 现在：{after_time}\n\n"
+                    "按钮已点击，但时间未确认增加\n"
+                    f"🔗 {server_url}"
+                )
+
                 browser.close()
-                return True
+                return False
+
             except PlaywrightTimeoutError:
                 print(f"错误: 在30秒内未找到或 '시간추가' 按钮不可见/不可点击。")
                 page.screenshot(path="add_6h_button_not_found.png")
@@ -127,11 +206,18 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/e66c2244"):
                 return False
 
         except Exception as e:
-            print(f"执行过程中发生未知错误: {e}")
-            # 发生任何异常时都截图，以便调试
+            error_msg = (
+                "❌ <b>服务器续期脚本异常</b>\n\n"
+                f"{e}\n\n"
+                f"🔗 {server_url}"
+            )
+
+            print(error_msg)
             page.screenshot(path="general_error.png")
+            send_telegram(error_msg)
             browser.close()
             return False
+
 
 if __name__ == "__main__":
     print("开始执行添加服务器时间任务...")
