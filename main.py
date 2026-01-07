@@ -1,7 +1,9 @@
 import os
+import re
 import time
 import traceback
 import requests
+from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 SERVER_URL = "https://hub.weirdhost.xyz/server/e66c2244"
@@ -32,27 +34,21 @@ def send_telegram(message: str):
         print(f"Telegram 发送失败: {e}")
 
 
-# ===================== 剩余时间读取 =====================
-def get_remaining_time_text(page):
+# ===================== 到期时间解析（最终定版） =====================
+def get_expire_datetime(page):
     """
-    ⚠️ 注意：
-    这里的 selector 可能需要你根据真实页面微调
-    先保证「找不到就返回 None，不抛异常」
+    从页面文本中解析：
+    유통기한 2026-01-10 13:25:54
+    返回 datetime 对象，失败返回 None
     """
-    selectors = [
-        "text=/Remaining/i",
-        "text=/시간/i",
-        "text=/남은/i",
-    ]
-
-    for sel in selectors:
-        loc = page.locator(sel)
-        if loc.count() > 0:
-            try:
-                return loc.first.inner_text().strip()
-            except Exception:
-                pass
-    return None
+    try:
+        text = page.locator("text=/유통기한/i").first.inner_text()
+        m = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", text)
+        if not m:
+            return None
+        return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
 
 
 # ===================== 主逻辑 =====================
@@ -100,7 +96,7 @@ def add_server_time():
                 page.fill('input[name="username"]', email)
                 page.fill('input[name="password"]', password)
 
-                with page.expect_navigation():
+                with page.expect_navigation(wait_until="domcontentloaded"):
                     page.click('button[type="submit"]')
 
                 if "login" in page.url:
@@ -110,14 +106,14 @@ def add_server_time():
             if page.url != SERVER_URL:
                 page.goto(SERVER_URL, wait_until="domcontentloaded")
 
-            # ---------- 读取点击前时间 ----------
-            before_time = get_remaining_time_text(page)
-            print(f"点击前剩余时间: {before_time}")
+            # ---------- 点击前到期时间 ----------
+            before_time = get_expire_datetime(page)
+            print(f"点击前到期时间: {before_time}")
 
             if not before_time:
-                raise RuntimeError("无法读取点击前剩余时间")
+                raise RuntimeError("无法解析点击前到期时间")
 
-            # ---------- 查找并点击按钮（关键修复点） ----------
+            # ---------- 查找并点击「시간추가」 ----------
             print("🔍 查找 시간추가 按钮")
             add_button = page.locator('button:has-text("시간추가")')
 
@@ -131,26 +127,27 @@ def add_server_time():
 
             page.wait_for_timeout(5000)
 
-            # ---------- 读取点击后时间 ----------
-            after_time = get_remaining_time_text(page)
-            print(f"点击后剩余时间: {after_time}")
+            # ---------- 点击后到期时间 ----------
+            after_time = get_expire_datetime(page)
+            print(f"点击后到期时间: {after_time}")
 
             if not after_time:
-                raise RuntimeError("无法读取点击后剩余时间")
+                raise RuntimeError("无法解析点击后到期时间")
 
-            # ---------- 成功校验 ----------
-            if after_time == before_time:
-                raise RuntimeError("时间未发生变化，续期失败")
+            # ---------- 真实成功校验 ----------
+            if after_time <= before_time:
+                raise RuntimeError("到期时间未增加，续期失败")
 
-            # ---------- 成功 ----------
+            # ---------- 成功通知 ----------
             msg = (
                 "✅ <b>服务器时间增加成功</b>\n\n"
-                f"🔹 点击前: {before_time}\n"
-                f"🔹 点击后: {after_time}\n\n"
+                f"🕒 原到期时间: {before_time}\n"
+                f"🕒 新到期时间: {after_time}\n\n"
                 f"🔗 {SERVER_URL}"
             )
             send_telegram(msg)
-            print("🎉 成功完成")
+            print("🎉 任务成功完成")
+
             browser.close()
             return True
 
