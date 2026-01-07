@@ -29,7 +29,9 @@ jobs:
 
       - name: Install Playwright and dependencies # 步骤3: 安装 Playwright 及其浏览器依赖
         run: |
-          pip install playwright
+          python -m pip install --upgrade pip
+          pip install playwright requests
+
           playwright install --with-deps chromium # 安装 Chromium 浏览器及其运行所需的所有依赖
 
       - name: Run Time Adder Script # 步骤4: 运行你的 Python 脚本
