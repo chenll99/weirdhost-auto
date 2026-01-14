@@ -1,0 +1,43 @@
+name: test
+
+on:
+  workflow_dispatch: 
+  schedule:
+    - cron: '0 4 * * *'
+
+jobs:
+  add_time:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Playwright and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright requests 
+          playwright install --with-deps chromium
+
+      - name: Run Time Adder Script
+        env:
+          REMEMBER_WEB_COOKIE: ${{ secrets.REMEMBER_WEB_COOKIE }}
+          PTERODACTYL_EMAIL: ${{ secrets.PTERODACTYL_EMAIL }}
+          PTERODACTYL_PASSWORD: ${{ secrets.PTERODACTYL_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python test.py
+
+      - name: Upload error artifacts
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: "*.png"
