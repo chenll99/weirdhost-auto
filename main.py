@@ -6,7 +6,7 @@ import traceback
 import requests
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from playwright_stealth import stealth_sync  # 【修改点 3】引入隐身插件
+import playwright_stealth
 
 SERVER_URL = "https://hub.weirdhost.xyz/server/e66c2244"
 LOGIN_URL = "https://hub.weirdhost.xyz/auth/login"
@@ -40,7 +40,7 @@ def add_server_time():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         page = context.new_page()
-        stealth_sync(page)  # 激活隐身模式
+        playwright_stealth.stealth_sync(page)  # 激活隐身模式
         page.set_default_timeout(60000)
 
         try:
