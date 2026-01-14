@@ -30,18 +30,19 @@ def add_server_time():
     email = os.getenv("PTERODACTYL_EMAIL")
     password = os.getenv("PTERODACTYL_PASSWORD")
 
-    if not (remember_cookie or (email and password)):
-        raise RuntimeError("缺少登录凭据")
-
     with sync_playwright() as p:
-        # 【修改点 5】伪装浏览器指纹
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         page = context.new_page()
-        playwright_stealth.stealth_sync(page)  # 激活隐身模式
+        
+        # 【最终修正方案】使用 stealth(page) 代替 stealth_sync(page)
+        from playwright_stealth import stealth
+        stealth(page) 
+        
         page.set_default_timeout(60000)
+        # ... 后面保持不变 ...
 
         try:
             # ---------- 登录逻辑 ----------
