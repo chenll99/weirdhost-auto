@@ -34,26 +34,28 @@ def add_server_time():
     password = os.getenv("PTERODACTYL_PASSWORD")
 
     with sync_playwright() as p:
+        # 启动 Chromium
         browser = p.chromium.launch(headless=True)
-        # 增加更多的浏览器指纹伪装
+        # 配置深度伪装的浏览器上下文
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            viewport={'width': 1920, 'height': 1080},
-            device_scale_factor=1,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800},
+            locale="ko-KR",
+            timezone_id="Asia/Seoul"
         )
         page = context.new_page()
 
-        # 【核心修正】手动注入伪装脚本，替代 playwright-stealth 插件
+        # 【核心修正】手动注入抗爬虫伪装脚本，替代不稳定的插件
         page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
             window.chrome = {runtime: {}};
             Object.defineProperty(navigator, 'languages', {get: () => ['ko-KR', 'ko', 'en-US', 'en']});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
         """)
 
         page.set_default_timeout(60000)
 
         try:
+            # --- 登录部分 ---
             if remember_cookie:
                 context.add_cookies([{
                     "name": "remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d",
@@ -66,49 +68,57 @@ def add_server_time():
             page.goto(SERVER_URL, wait_until="networkidle")
 
             if "login" in page.url:
-                print("🔐 Cookie失效，尝试账号密码登录")
+                print("🔐 Cookie失效，尝试密码登录...")
                 page.goto(LOGIN_URL, wait_until="networkidle")
                 page.fill('input[name="username"]', email)
                 page.fill('input[name="password"]', password)
                 page.click('button[type="submit"]')
                 page.wait_for_url(SERVER_URL, timeout=20000)
 
+            # --- 续期操作 ---
             before_time = get_expire_datetime(page)
-            print(f"点击前时间: {before_time}")
+            print(f"操作前时间: {before_time}")
 
             add_button = page.locator('button:has-text("시간추가")')
             add_button.wait_for(state="visible")
-            time.sleep(random.uniform(3, 6)) # 稍微多停一会，更像真人
+            
+            # 模拟真实人类的随机延迟点击
+            time.sleep(random.uniform(2, 5))
             add_button.click()
-            print("🖱 已点击续期按钮")
+            print("🖱 已点击续期按钮，正在观察验证挑战...")
 
-            # 处理点击后的验证码
+            # --- 验证挑战处理 ---
+            # 针对截图中的 Cloudflare Turnstile，等待其可能出现的 iframe
+            time.sleep(5) 
             try:
-                # 给验证码框架一点加载时间
-                time.sleep(3)
+                # 定位验证码 iframe
                 captcha_frame = page.frame_locator('iframe[src*="cloudflare"]')
+                # 尝试定位复选框所在区域并点击
                 checkpoint = captcha_frame.locator('#challenge-stage')
                 if checkpoint.is_visible(timeout=5000):
-                    print("🔘 发现挑战，尝试点击...")
-                    checkpoint.click()
-                    time.sleep(10) # 验证码通过需要时间
+                    print("🔘 发现验证复选框，尝试强制点击...")
+                    checkpoint.click(force=True)
+                    time.sleep(10) # 给验证码通过留出时间
             except:
-                print("ℹ️ 未发现或已通过验证码")
+                print("ℹ️ 未发现验证框或点击失败，继续后续逻辑")
 
+            # 等待数据刷新
             time.sleep(5)
             after_time = get_expire_datetime(page)
-            print(f"点击后时间: {after_time}")
+            print(f"操作后时间: {after_time}")
 
             if after_time and (not before_time or after_time > before_time):
-                send_telegram(f"✅ 续期成功！\n新到期: {after_time}")
+                send_telegram(f"✅ <b>续期成功</b>\n新到期时间: {after_time}")
                 return True
             else:
-                raise RuntimeError("续期后时间未增加")
+                # 如果没成功，最后截一张图辅助分析
+                page.screenshot(path="final_check.png")
+                raise RuntimeError("续期后时间未增加，可能卡在验证挑战")
 
         except Exception as e:
             page.screenshot(path="error.png")
             print(traceback.format_exc())
-            send_telegram(f"❌ 运行异常: {str(e)}")
+            send_telegram(f"❌ <b>运行异常</b>\n{str(e)}")
             return False
         finally:
             browser.close()
