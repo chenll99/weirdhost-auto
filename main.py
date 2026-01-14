@@ -1,29 +1,19 @@
 import os
 import re
 import time
-import random  # 【修改点 2】引入随机数
+import random
 import traceback
 import requests
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+# 【核心修正点】改用这种最稳妥的导入方式
 import playwright_stealth
 
 SERVER_URL = "https://hub.weirdhost.xyz/server/e66c2244"
 LOGIN_URL = "https://hub.weirdhost.xyz/auth/login"
 
-# ... (send_telegram 函数保持不变)
-
-def get_expire_datetime(page):
-    try:
-        # 【修改点 4】增加等待，确保元素加载出来再解析
-        page.wait_for_selector("text=/유통기한/i", timeout=10000)
-        text = page.locator("text=/유통기한/i").first.inner_text()
-        m = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", text)
-        if not m:
-            return None
-        return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return None
+# ... (send_telegram 和 get_expire_datetime 函数保持不变)
 
 def add_server_time():
     remember_cookie = os.getenv("REMEMBER_WEB_COOKIE")
@@ -37,12 +27,11 @@ def add_server_time():
         )
         page = context.new_page()
         
-        # 【最终修正方案】使用 stealth(page) 代替 stealth_sync(page)
-        from playwright_stealth import stealth
-        stealth(page) 
+        # 【核心修正点】使用全路径调用，避免“模块不可调用”错误
+        playwright_stealth.stealth_sync(page) 
         
         page.set_default_timeout(60000)
-        # ... 后面保持不变 ...
+        # ... 后面逻辑保持不变 ...
 
         try:
             # ---------- 登录逻辑 ----------
