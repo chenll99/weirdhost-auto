@@ -30,7 +30,9 @@ jobs:
       - name: Install Playwright and dependencies # 步骤3: 安装 Playwright 及其浏览器依赖
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests
+          # 【修改点 1】此处增加了 playwright-stealth 插件
+          pip install playwright requests playwright-stealth          
+          # 安装浏览器内核
 
           playwright install --with-deps chromium # 安装 Chromium 浏览器及其运行所需的所有依赖
 
