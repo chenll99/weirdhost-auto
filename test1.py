@@ -23,11 +23,11 @@ def add_server_time():
             locale="ko-KR"
         )
         page = context.new_page()
-        # 基础反检测注入
+        # 注入高级伪装，隐藏自动化特征
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         try:
-            # --- 阶段 1: 登录验证 ---
+            # --- 1. 登录处理 ---
             if remember_cookie:
                 context.add_cookies([{"name": "remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d", "value": remember_cookie, "domain": "hub.weirdhost.xyz", "path": "/"}])
             
@@ -40,51 +40,58 @@ def add_server_time():
                 page.click('button[type="submit"]')
                 page.wait_for_url(SERVER_URL, timeout=20000)
             
-            page.screenshot(path="step1_login_success.png")
-            print("📸 阶段 1 完成：登录并进入控制台")
+            page.screenshot(path="step1_login_check.png")
 
-            # --- 阶段 2: 准备点击续期 ---
+            # --- 2. 准备点击 ---
             add_button = page.locator('button:has-text("시간추가")')
             add_button.wait_for(state="visible")
-            page.screenshot(path="step2_before_click_renew.png")
-            
             add_button.click()
-            print("🖱 阶段 2 完成：已点击续期按钮")
+            print("🖱 已点击续期按钮，正在处理验证挑战...")
 
-            # --- 阶段 3: 验证挑战出现 ---
-            time.sleep(5) # 等待 5 秒让 CF 挑战框加载
-            page.screenshot(path="step3_cf_challenge_loaded.png")
+            # --- 3. 核心：坐标盲点突破 CF 验证 ---
+            time.sleep(6) # 给验证码 6 秒加载时间
+            page.screenshot(path="step2_cf_appear.png")
             
-            # --- 阶段 4: 尝试点击验证框 ---
-            cf_frame = page.frame_locator('iframe[src*="cloudflare"]')
-            checkpoint = cf_frame.locator('div#challenge-stage, input[type="checkbox"]')
-            
-            if checkpoint.is_visible(timeout=5000):
-                checkpoint.click(force=True)
-                print("🔘 阶段 4：检测到 CF 复选框并尝试点击")
-                time.sleep(3)
-                page.screenshot(path="step4_after_cf_click.png")
-            else:
-                print("ℹ️ 阶段 4：未发现显式 CF 复选框，可能正在自动验证")
+            cf_frame = page.query_selector('iframe[src*="cloudflare"]')
+            if cf_frame:
+                box = cf_frame.bounding_box()
+                if box:
+                    # 计算复选框的大致坐标：iframe 内部靠左约 40 像素，垂直居中
+                    target_x = box['x'] + 45
+                    target_y = box['y'] + box['height'] / 2
+                    
+                    print(f"🎯 识别到验证框坐标: ({target_x}, {target_y})")
+                    # 模拟真人鼠标轨迹移动
+                    page.mouse.move(target_x - 20, target_y - 20)
+                    time.sleep(0.5)
+                    # 执行物理点击
+                    page.mouse.click(target_x, target_y)
+                    print("🖱 已执行物理坐标点击")
+                    
+                    time.sleep(2)
+                    page.screenshot(path="step3_after_click.png")
 
-            # --- 阶段 5: 等待挑战处理结果 ---
-            print("⏳ 阶段 5：正在等待 15 秒处理结果...")
-            time.sleep(15)
-            page.screenshot(path="step5_after_wait_cf.png")
+            # --- 4. 观察与容错等待 ---
+            print("⏳ 等待验证处理 (25秒)...")
+            time.sleep(25)
+            page.screenshot(path="step4_after_wait.png")
 
-            # --- 阶段 6: 最终状态确认 ---
+            # --- 5. 最终状态刷新 ---
             page.reload(wait_until="networkidle")
             time.sleep(5)
-            page.screenshot(path="step6_final_result.png")
+            page.screenshot(path="step5_final_check.png")
             
+            # 判定结果：包含红色报错字符或时间增加均视为完成
             content = page.content()
-            if "once at one time period" in content:
-                print("✅ 结果：检测到续期限制文字，CF 验证已通过")
+            if "once at one time period" in content or "이미 연장" in content:
+                print("✅ 验证通过：当前已是最新状态")
+            else:
+                print("ℹ️ 流程结束，请查看截图确认效果")
             
-            return True # 强制成功以保存所有截图
+            return True # 强制 True 以便在 Actions 看到所有截图
 
         except Exception as e:
-            page.screenshot(path="error_crash.png")
+            page.screenshot(path="error_stack.png")
             print(f"❌ 运行崩溃: {e}")
             return False
         finally:
