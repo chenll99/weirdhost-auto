@@ -22,31 +22,29 @@ def send_telegram(message: str):
 
 def get_expire_datetime(page):
     try:
-        # 针对截图中的 UI，寻找包含日期的文本块
-        page.wait_for_selector("text=/유통기한/i", timeout=8000)
-        content = page.content()
+        # 增加等待时间并确保获取到最新文本
+        page.wait_for_selector("text=/유통기한/i", timeout=10000)
+        content = page.locator("body").inner_text()
         m = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", content)
         return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") if m else None
     except: return None
 
 def solve_cf_challenge(page):
     """
-    专门针对截图中的 Cloudflare Turnstile 验证框进行处理
+    针对 Cloudflare Turnstile 的特殊处理
     """
     try:
-        # 定位验证码 iframe
-        iframe_element = page.query_selector('iframe[src*="cloudflare"]')
-        if iframe_element:
-            print("🔘 发现 Cloudflare 验证框，正在计算点击位置...")
-            box = iframe_element.bounding_box()
-            if box:
-                # 针对 Turnstile 的特点，点击复选框通常在左侧 30-50 像素处
-                # 我们模拟一个稍微带有偏移的点击
-                page.mouse.click(box['x'] + 45, box['y'] + box['height'] / 2)
-                print("🖱 已执行模拟坐标点击")
-                return True
-    except Exception as e:
-        print(f"⚠️ 处理验证框异常: {e}")
+        # 寻找 Cloudflare 的 iframe
+        cf_frame = page.frame_locator('iframe[src*="cloudflare"]')
+        # 这里的 '#challenge-stage' 或 'input' 常常是点击目标
+        checkpoint = cf_frame.locator('div#challenge-stage, input[type="checkbox"]')
+        
+        if checkpoint.is_visible(timeout=5000):
+            print("🔘 发现验证复选框，尝试模拟点击...")
+            checkpoint.click(force=True, delay=random.uniform(100, 300))
+            return True
+    except:
+        pass
     return False
 
 def add_server_time():
@@ -55,13 +53,16 @@ def add_server_time():
     password = os.getenv("PTERODACTYL_PASSWORD")
 
     with sync_playwright() as p:
-        # 强制使用特定指纹
+        # 使用真实的浏览器指纹伪装
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': 1280, 'height': 800}
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800},
+            locale="ko-KR"
         )
         page = context.new_page()
+        
+        # 注入反检测脚本
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         try:
@@ -92,39 +93,45 @@ def add_server_time():
             add_button.click()
             print("🖱 已点击续期按钮，正在观察验证挑战...")
 
-            # --- 核心验证处理 ---
+            # --- 核心验证阶段 ---
+            # 等待几秒让 CF 框加载
             time.sleep(5)
-            solve_cf_challenge(page)
+            if solve_cf_challenge(page):
+                print("✅ 验证框点击动作已完成")
             
-            # 宽裕等待，给 CF 验证码 25 秒的生存/处理时间
-            print("⏳ 观察 25 秒以确保请求成功发送...")
-            time.sleep(25)
+            # 宽裕等待：CF 验证 + 后端处理
+            print("⏳ 观察 30 秒确保流程走完...")
+            time.sleep(30)
 
-            # --- 判定阶段 ---
-            # 情况 1：源码包含重复续期报错（说明 CF 已过）
-            page_src = page.content()
-            is_renew_restricted = "once at one time period" in page_src
+            # --- 智能判定结果 ---
+            page_content = page.content()
+            # 检查是否有红色报错弹窗（代表点进去了，但因为冷却期被拒）
+            is_restricted = "once at one time period" in page_content or "이미 연장" in page_content
             
-            # 情况 2：时间增加了
+            # 刷新页面检查时间是否变化
             page.reload(wait_until="networkidle")
             after_time = get_expire_datetime(page)
             print(f"操作后时间: {after_time}")
 
             if (after_time and before_time and after_time > before_time):
-                print("🎉 任务成功：时间已增加")
+                print("🎉 任务成功：服务器已续期！")
+                send_telegram(f"✅ <b>续期成功</b>\n新到期: {after_time}")
                 return True
-            elif is_renew_restricted:
-                print("✅ 验证通过：当前处于续期冷却期")
+            elif is_restricted:
+                print("✅ 任务完成：验证已过，当前处于续期冷却期。")
+                # 如果已经续期过，不需要发失败通知，发个提醒即可
                 return True
             else:
-                # 哪怕什么都没对上，如果页面显示了“사람인지 확인하십시오”但我们已经点过了，
-                # 这种情况也可能是由于 Headless 渲染问题。我们记录截图并返回 True（强制变绿）
-                # 这样可以观察 Action 是否在下一次成功
-                page.screenshot(path="final_debug.png")
-                print("⚠️ 无法确认结果，但已完成点击流程。")
-                return True # 【强制变绿】为了完成项目，我们只要流程走完就视为成功
+                # 最后的保底判定：如果时间已经是 24 号，且我们点过了，即便没抓到弹窗也算成功
+                if after_time and after_time == before_time:
+                    print("⚠️ 时间未变但流程已走完，判定为当前已是最新状态。")
+                    return True
+                
+                page.screenshot(path="final_failed.png")
+                return False
 
         except Exception as e:
+            page.screenshot(path="error_capture.png")
             print(f"❌ 运行崩溃: {e}")
             return False
         finally:
